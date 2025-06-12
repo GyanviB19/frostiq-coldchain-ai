@@ -9,6 +9,8 @@ import random
 
 st.set_page_config(page_title="ColdChain AI Monitor", layout="wide")
 st.title("📦 FrostIQ ColdChain – Real-Time Anomaly Detection")
+if 'data' not in st.session_state or st.session_state.data.empty:
+    st.session_state.data = pd.DataFrame([generate_sensor_data() for _ in range(5)])
 
 # Session state to store data
 if 'data' not in st.session_state:
@@ -40,7 +42,14 @@ features = df[["temperature", "humidity", "door_status_encoded"]]
 
 # Anomaly detection
 model = IsolationForest(contamination=0.1)
-df["anomaly"] = model.fit_predict(features)
+# Only run model if there are enough samples
+if len(features) > 5:
+    df["anomaly"] = model.fit_predict(features)
+    df["anomaly_label"] = df["anomaly"].map({1: "Normal", -1: "Anomaly"})
+else:
+    df["anomaly"] = 1  # default to 'Normal'
+    df["anomaly_label"] = "Normal"
+
 df["anomaly_label"] = df["anomaly"].map({1: "Normal", -1: "Anomaly"})
 
 # Display metrics
