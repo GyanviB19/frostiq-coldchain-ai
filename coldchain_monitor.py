@@ -27,8 +27,11 @@ def generate_sensor_data():
     }
 
 # Append new data each run
-new_data = generate_sensor_data()
-st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([new_data])], ignore_index=True)
+# Button to simulate new reading
+if st.button("➕ Simulate New Reading"):
+    new_data = generate_sensor_data()
+    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([new_data])], ignore_index=True)
+    st.success("New reading added!")
 
 # Preprocessing
 df = st.session_state.data.copy()
