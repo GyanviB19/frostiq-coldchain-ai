@@ -1,66 +1,56 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np
-from sklearn.ensemble import IsolationForest
-from datetime import datetime
 import matplotlib.pyplot as plt
-import random
+from sklearn.ensemble import IsolationForest
+import plotly.express as px
 
-st.set_page_config(page_title="ColdChain AI Monitor", layout="wide")
-st.title("📦 FrostIQ ColdChain – Real-Time Anomaly Detection")
+st.set_page_config(page_title="ColdChain AI – Full Dataset Monitor", layout="wide")
+st.title("📦 FrostIQ ColdChain – Full Dataset Monitoring & Anomaly Detection")
 
-# Define sensor simulation function
-def generate_sensor_data():
-    temp = round(np.random.uniform(2, 12), 2)
-    if np.random.rand() < 0.05:  # Inject anomaly
-        temp = round(np.random.uniform(15, 20), 2)
-    return {
-        "timestamp": datetime.now(),
-        "temperature": temp,
-        "humidity": round(np.random.uniform(60, 95), 2),
-        "door_status": np.random.choice(["open", "closed"])
-    }
+# Load dataset
+@st.cache_data
+def load_data():
+    return pd.read_csv("coldchain_full_dataset.csv", parse_dates=["timestamp"])
 
-# Preload with 5 entries if empty
-if 'data' not in st.session_state or st.session_state.data.empty:
-    st.session_state.data = pd.DataFrame([generate_sensor_data() for _ in range(5)])
-
-# Button to simulate a new reading
-if st.button("➕ Simulate New Reading"):
-    new_data = generate_sensor_data()
-    st.session_state.data = pd.concat([st.session_state.data, pd.DataFrame([new_data])], ignore_index=True)
-    st.success("New reading added!")
-
-# Prepare data
-df = st.session_state.data.copy()
+df = load_data()
 df["door_status_encoded"] = df["door_status"].map({"closed": 0, "open": 1})
-features = df[["temperature", "humidity", "door_status_encoded"]]
+features = df[["temperature", "humidity", "external_temp", "wind_speed", "door_status_encoded"]]
 
 # Anomaly detection
-if len(features) > 5:
-    model = IsolationForest(contamination=0.1)
-    df["anomaly"] = model.fit_predict(features)
-    df["anomaly_label"] = df["anomaly"].map({1: "Normal", -1: "Anomaly"})
-else:
-    df["anomaly"] = 1
-    df["anomaly_label"] = "Normal"
+model = IsolationForest(contamination=0.05, random_state=42)
+df["anomaly"] = model.fit_predict(features)
+df["anomaly_label"] = df["anomaly"].map({1: "Normal", -1: "Anomaly"})
 
 # Display metrics
-anomalies = df[df["anomaly_label"] == "Anomaly"]
-st.metric("Total Readings", len(df))
-st.metric("Detected Anomalies", len(anomalies))
+st.metric("Total Records", len(df))
+st.metric("Detected Anomalies", len(df[df["anomaly_label"] == "Anomaly"]))
 
-# Plot temperature with anomalies
-fig, ax = plt.subplots(figsize=(10, 4))
-ax.plot(df["timestamp"], df["temperature"], label="Temperature", color='blue')
-ax.scatter(anomalies["timestamp"], anomalies["temperature"], color="red", label="Anomaly", marker="x")
-ax.set_title("Temperature over Time with Anomalies")
-ax.set_ylabel("°C")
-ax.set_xlabel("Timestamp")
-ax.legend()
-ax.grid(True)
-st.pyplot(fig)
+# Line chart of temperature
+st.subheader("Temperature Over Time")
+fig_temp, ax_temp = plt.subplots(figsize=(12, 4))
+ax_temp.plot(df["timestamp"], df["temperature"], label="Temperature", color='blue')
+anomaly_pts = df[df["anomaly_label"] == "Anomaly"]
+ax_temp.scatter(anomaly_pts["timestamp"], anomaly_pts["temperature"], color="red", label="Anomaly", marker="x")
+ax_temp.set_xlabel("Time")
+ax_temp.set_ylabel("°C")
+ax_temp.set_title("Internal Temperature Readings with Anomalies")
+ax_temp.legend()
+st.pyplot(fig_temp)
 
-st.info("ℹ️ Click 'Simulate New Reading' to keep adding data.")
+# Weather correlation
+st.subheader("Weather Correlation")
+fig_weather = px.scatter(df, x="external_temp", y="temperature", color="anomaly_label",
+                         labels={"external_temp": "External Temp (°C)", "temperature": "Internal Temp (°C)"},
+                         title="Internal vs External Temperature (Colored by Anomaly)")
+st.plotly_chart(fig_weather)
 
+# GPS map of readings
+st.subheader("GPS Route of All Readings")
+fig_map = px.scatter_mapbox(df, lat="gps_lat", lon="gps_lon", color="anomaly_label",
+                            zoom=10, height=400,
+                            mapbox_style="open-street-map",
+                            title="ColdChain GPS Route with Anomalies Highlighted")
+st.plotly_chart(fig_map)
+
+st.caption("Data Source: Simulated IoT & Weather for ColdChain logistics.")
